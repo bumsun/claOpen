@@ -1,0 +1,330 @@
+import random
+import cv2
+import numpy as np
+import glob
+from PIL import Image
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFilter
+import os
+from PIL import ImageFont
+from PIL import ImageDraw 
+array_title = ["Агент Дельта","Агент Синяя Фурия","Агент Чёрный пёс","Агент Кремень","Агент Пикадили","Майор Гром","Агент Тыковка","Агент Красная шапочка","Агент Первоцвет","Агент Пурпурный человек","Агент Саблезубый","Агент Красный мокасин","Агент Мрачный крепыш","Агент Бешеная выхухоль"]
+array_funcs = ["сверхчеловеческих способностей не имеет","не боится вступать в спор с начальством","настоящий профи по незаметному устранению противника","шаман","невероятно красивые глаза","человек-пинок","на спор агент способен на всё","может 17 раз повторять что угодно кому угодно","виртуозно владеет логикой","нюх как у собаки, глаз как у орла"]
+array_missions = ["соблюдать баланс сил в мире","регулярно поставлять любовь и радость окружающим","завоевать маленькое государство","внедриться в верхушку лидеров","Вычислить и обезвредить скуку"]
+
+import requests
+from PIL import Image, ImageChops
+from io import BytesIO
+from PIL.ExifTags import TAGS, GPSTAGS
+from GPSPhoto import gpsphoto
+class BumsApi(object):
+    
+    def __init__(self):
+        pass
+    
+    def getResizedImage(self,img_path, video_size):
+        img = Image.open(img_path)
+        width, height = video_size  # these are the MAX dimensions
+        video_ratio = width / height
+        img_ratio = img.size[0] / img.size[1]
+        if video_ratio >= 1:  # the video is wide
+            if img_ratio <= video_ratio:  # image is not wide enough
+                width_new = int(height * img_ratio)
+                size_new = width_new, height
+            else:  # image is wider than video
+                height_new = int(width / img_ratio)
+                size_new = width, height_new
+        else:  # the video is tall
+            if img_ratio >= video_ratio:  # image is not tall enough
+                height_new = int(width / img_ratio)
+                size_new = width, height_new
+            else:  # image is taller than video
+                width_new = int(height * img_ratio)
+                size_new = width_new, height
+        return img.resize(size_new, resample=Image.LANCZOS)
+    def getPersonFromImage(self,imagePath):
+        urlImage = self.getPhotoLabUrl(imagePath)
+        personImageUrl = self.getSilhouete(urlImage)
+        return personImageUrl
+    def getPhotoLabUrl(self, imagePath):
+        image = self.getResizedImage(imagePath,(500,500))
+        image.save(imagePath, "JPEG")
+        data = {
+            'no_resize': '1'
+        }
+        files = {
+            'file1': open(imagePath, 'rb')
+        }
+        url = "http://upload-soft.photolab.me/upload.php"
+        r = requests.post(url,data=data, files=files)
+        print(r.text)
+        return r.text
+    def autocrop_image3(self,im):
+        bg = Image.new(im.mode, im.size, im.getpixel((0,0)))
+        diff = ImageChops.difference(im, bg)
+        diff = ImageChops.add(diff, diff, 2.0, -100)
+        #Bounding box given as a 4-tuple defining the left, upper, right, and lower pixel coordinates.
+        #If the image is completely empty, this method returns None.
+        bbox = diff.getbbox()
+        if bbox:
+            return im.crop(bbox)
+    def getSilhouete(self,imageUrl):
+        data = {
+            'template_name': '1911',
+            'image_url[1]': imageUrl
+        }
+
+
+        url = "http://api-soft.photolab.me/template_process.php"
+        r = requests.post(url,data=data)
+        silImageUrl = r.text
+        print('response = ' + r.text)
+        response = requests.get(silImageUrl)
+        img = Image.open(BytesIO(response.content))
+        img = img.convert("RGBA")
+        img = self.autocrop_image3(img)
+        img.save("img2.png", "PNG")
+        return img
+    def getCityAndCountryByImageWithExif(self,imagePath):
+        data = gpsphoto.getGPSData(imagePath)
+        print(data)
+        if ('Latitude' in data):
+            data = {
+                'lat': data['Latitude'],
+                'lon': data['Longitude']
+            }
+        else:
+            data = {
+                'lat': '55.773496888888886',
+                'lon': '37.63142169444445'
+            }
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+
+
+        url = "http://207.154.218.146/api/getCity"
+        r = requests.post(url,data=data)
+        print(r.json())
+        if (len(r.json()) > 0):
+            return (data['lat'],data['lon'],r.json()[0]["tab_nomad_guide"]["country"].capitalize() +","+r.json()[0]["city_name"])
+        else :
+            return (data['lat'],data['lon'], "Город засекречен")
+
+
+bumsApi = BumsApi()
+img_path = 'jul.jpg'
+lat,lon,city = bumsApi.getCityAndCountryByImageWithExif(img_path)
+print(lat)
+print(lon)
+print(city)
+photo_lub_url = bumsApi.getPersonFromImage(img_path)
+
+
+def autocrop_image(image):
+    image.load()
+
+    image_data = np.asarray(image)
+    image_data_bw = image_data_bw = image_data[:,:,3]
+    non_empty_columns = np.where(image_data_bw.max(axis=0) > 0)[0]
+    non_empty_rows = np.where(image_data_bw.max(axis=1) > 0)[0]
+    cropBox = (min(non_empty_rows), max(non_empty_rows),
+               min(non_empty_columns), max(non_empty_columns))
+
+    image_data_new = image_data[cropBox[0]:cropBox[
+        1] + 1, cropBox[2]:cropBox[3] + 1, :]
+
+    new_image = Image.fromarray(image_data_new)
+    return new_image
+import shutil
+import requests
+min_zoom = 17
+
+lat = str(lat)
+lon = str(lon)
+print(lat)
+print(lon)
+photo_path = 'img2.png'
+for zoom in range(min_zoom, 18): 
+    response = requests.get("https://maps.googleapis.com/maps/api/staticmap?center=" + lat + "," + lon + "&zoom=" + str(zoom) + "&scale=4&size=640x360&maptype=satellite&key=AIzaSyDJrwFDlj0KxrgP6W91C08IhDNJ1Zr8ANA", stream=True)
+    with open('loaded_images/' + str(zoom) + '.png', 'wb') as out_file:
+        shutil.copyfileobj(response.raw, out_file)
+    del response
+
+
+from pyagender import PyAgender
+def detectGender(imgPath):
+    agender = PyAgender() 
+    faces = agender.detect_genders_ages(cv2.imread(imgPath))
+    if ((faces is not None) & (len(faces) > 0)):
+        return faces[0]
+    else:
+        return None
+    print(faces)
+
+detected_face = detectGender(photo_path)
+age = -1
+gender = -1
+gender_text = ""
+if (detected_face is not None):
+    age = int(round(detected_face['age']*0.8))
+    gender = int(round(detected_face['gender']))
+print('age = ' + str(age) + ' gender = ' + str(gender))
+if (age != -1):
+    if (gender == 1):
+        gender_text = "Ж"
+    else:
+        gender_text = "М"
+    print('show age')
+else:
+    print('hide age')
+    
+def resizeImage(img):
+    scale_percent = 200 # percent of original size
+    width = 1280
+    height = 720
+    dim = (width, height)
+    # resize image
+    resized = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+    return resized
+def resizeWhithScaleImage(img, scale):
+    scale_percent = 200 # percent of original size
+    y = int(scale / 2)
+    x = int(scale / 2)
+    width = 1280
+    height = 720
+    dim = (width+scale, height+scale)
+    img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+    # resize image
+    sliceX = int(width + y)
+    sliceY = int(height + y)
+    img = img[y:sliceY, x:sliceX]
+    dim = (width, height)
+    resized = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+    return resized
+finalResult = []
+def blendSky(img_array):
+    max_range = 20
+    scaleSlice = 100
+    
+    for x in range(1, max_range):
+        scaleX = int(scaleSlice * 1.77)
+        alpha_photo = Image.open('video1/133.png').resize((1280, 720))
+        bg = Image.open('loaded_images/' + str(17) + '.png').resize((1280+scaleX, 720+scaleSlice)).crop((scaleX/2, scaleSlice/2, 1280+scaleX/2, 720+scaleSlice/2)).resize((1280, 720))
+        print("bg width = " + str(bg.size))
+        alpha_photo.putalpha(256)
+        bg.putalpha(256)
+        calc_alpha = float(x)/float(max_range)
+        result = Image.blend(alpha_photo, bg, alpha=calc_alpha)
+        finalResult = result
+        open_cv_image = np.array(result.convert('RGB')) 
+        open_cv_image = open_cv_image[:, :, ::-1].copy()
+        img_array.append(open_cv_image)
+        scaleSlice += int(100 / x)
+
+offset = (744, 214)
+img = autocrop_image(Image.open(photo_path))
+img_w, img_h = img.size
+scale = img_w/img_h
+img = img.resize((int(220), int(220/scale))).crop((0,0,220,228))
+img.convert("RGBA")
+transparent_bg = Image.new('RGBA', (1280, 720), (255, 255, 255, 0))
+transparent_bg.paste(img, offset)
+draw = ImageDraw.Draw(transparent_bg)
+font = ImageFont.truetype("BebasNeue_Bold.ttf", 48)
+draw.text((212, 231),random.choice(array_title),(0,0,0),font=font)
+
+def addGreenText():
+    fontDescription = ImageFont.truetype("BebasNeue_Bold.ttf", 20)
+    interval = 32
+    draw.text((212, 321),'Замечен',(15,219,140),font=fontDescription)
+    draw.text((212, 321+interval),'Способности',(15,219,140),font=fontDescription)
+    draw.text((212, 321+interval*2),'Миссия',(15,219,140),font=fontDescription)
+
+    draw.text((336, 321),city,(255,255,255),font=fontDescription)
+    draw.text((336, 321+interval),random.choice(array_funcs),(255,255,255),font=fontDescription)
+    draw.text((336, 321+interval*2),random.choice(array_missions),(255,255,255),font=fontDescription)
+    if (age != -1):
+        draw.text((212, 321+interval*3),'Пол',(15,219,140),font=fontDescription)
+        draw.text((212, 321+interval*4),'Возраст',(15,219,140),font=fontDescription)
+
+        draw.text((336, 321+interval*3),gender_text,(255,255,255),font=fontDescription)
+        draw.text((336, 321+interval*4),str(age),(255,255,255),font=fontDescription)
+transparent_bg.save('transparent_bg.png')
+
+def pastePhoto(bg, index):
+    
+    bg = bg.convert("RGBA")
+    bg_w, bg_h = bg.size
+    
+#     alpha = 0.1
+#     if (index == 145) :
+#         alpha = 0.1
+#         transparent_bg.putalpha = 40
+#     elif (index == 146) : 
+#         alpha = 0.2
+#         transparent_bg.putalpha = 80
+#     elif (index == 147) : 
+#         alpha = 0.3
+#         transparent_bg.putalpha = 120
+#     elif (index == 148) : 
+#         alpha = 0.4
+#         transparent_bg.putalpha = 140
+#     elif (index == 149) : 
+#         alpha = 0.5
+#         transparent_bg.putalpha = 160
+#     elif (index > 149):
+#         alpha = 0.5
+
+#     transparent_bg.convert("RGBA")
+    bg = Image.alpha_composite(bg, transparent_bg)
+    
+  
+    return bg
+
+img_array = []
+index = 10
+scaleSlice = 20
+# for filename in glob.glob('video1/*.png'):
+#     os.rename(os.path.join(os.getcwd(), filename), 'video1/' + str(int(os.path.splitext(filename)[0].split('video1/')[1])) + '.png')
+
+
+for videoIndex in range(len(glob.glob('video1/*.png'))):
+    img = cv2.imread('video1/' + str(videoIndex) + '.png')
+    img = resizeImage(img)
+    height, width, layers = img.shape
+    size = (width,height)
+    img_array.append(img)
+
+
+
+blendSky(img_array)
+last_img = img_array[len(img_array)-1]
+for videoIndex in range(len(glob.glob('effects/*.png'))):
+    alpha_photo = Image.open('effects/' + str(videoIndex) + '.png')
+    last_img = cv2.cvtColor(last_img, cv2.COLOR_BGR2RGB)
+    bg = Image.fromarray(last_img)
+    alpha_photo = alpha_photo.convert("RGBA")
+    bg = bg.convert("RGBA")
+    result = Image.alpha_composite(bg, alpha_photo)
+    if (videoIndex >= 145):
+        if (videoIndex == 157):
+            addGreenText()
+        result = pastePhoto(result, videoIndex)
+    open_cv_image = np.array(result.convert('RGB')) 
+    open_cv_image = open_cv_image[:, :, ::-1].copy() 
+    img_array.append(resizeWhithScaleImage(open_cv_image, scaleSlice))
+    
+out = cv2.VideoWriter('project.mp4',cv2.VideoWriter_fourcc(*'DIVX'), 30, size)
+ 
+for i in range(len(img_array)):
+    out.write(img_array[i])
+out.release()
+print('finished')
+
+
+
+import moviepy.editor as mp
+video = mp.VideoFileClip("project.mp4")
+video.write_videofile("output.mp4", audio="sound.mp3")
